@@ -140,6 +140,26 @@ if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","ShiftLeft","Enter"]
   keys.add(e.code);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
+// ===== iOS Safari: prevent double-tap zoom & gesture zoom =====
+let _lastTouchEnd = 0;
+
+// Double-tap zoom killer (iOS Safari)
+document.addEventListener("touchend", (e) => {
+  const now = Date.now();
+  if (now - _lastTouchEnd <= 300) {
+    e.preventDefault(); // stop double-tap zoom
+  }
+  _lastTouchEnd = now;
+}, { passive: false });
+
+// Gesture zoom prevent (pinch etc.)
+document.addEventListener("gesturestart", (e) => e.preventDefault(), { passive:false });
+document.addEventListener("gesturechange", (e) => e.preventDefault(), { passive:false });
+document.addEventListener("gestureend", (e) => e.preventDefault(), { passive:false });
+
+// Long-press context menu prevent
+document.addEventListener("contextmenu", (e) => e.preventDefault());
+
 
 // Mobile buttons
 const touch = { left:false, right:false, up:false, down:false, shot:false };
