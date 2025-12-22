@@ -19,6 +19,27 @@ canvas.addEventListener("pointerdown", () => {
     return;
   }
 
+    // Title: tap to decide (mobile)
+  if (scene === Scene.Title && titleUnlocked) {
+    if (menuIndex === 0) {
+      ensureAudio();
+      resetRun();
+      scene = Scene.Play;
+      startBgm("play");
+      jingle("start");
+    } else if (menuIndex === 1) {
+      scene = Scene.How;
+      ensureAudio();
+      startBgm("title");
+      se(520,0.06,"sine",0.08);
+    } else {
+      scene = Scene.Settings;
+      ensureAudio();
+      startBgm("title");
+      se(420,0.06,"sine",0.08);
+    }
+    return; // ← タップを消費（End側に流れない）
+  }
 
   // Ending: click to return title
   if (scene === Scene.End) {
