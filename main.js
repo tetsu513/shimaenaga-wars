@@ -8,6 +8,50 @@
 
 // ---------- Canvas sizing (responsive) ----------
 const canvas = document.getElementById("game");
+// Drag anywhere on canvas to move the player (relative)
+canvas.addEventListener("pointerdown", (e) => {
+  // タイトル画面の「最初のタップ」等、既存処理があるので邪魔しないように
+  // Play中だけドラッグ移動を有効にする
+  if (scene !== Scene.Play) return;
+
+  drag.active = true;
+  drag.pointerId = e.pointerId;
+  drag.lastX = e.clientX;
+  drag.lastY = e.clientY;
+  drag.dx = 0;
+  drag.dy = 0;
+
+  // iOS: prevent scroll/zoom selection
+  e.preventDefault();
+  canvas.setPointerCapture?.(e.pointerId);
+}, { passive: false });
+
+canvas.addEventListener("pointermove", (e) => {
+  if (!drag.active || e.pointerId !== drag.pointerId) return;
+  const x = e.clientX;
+  const y = e.clientY;
+
+  drag.dx += (x - drag.lastX);
+  drag.dy += (y - drag.lastY);
+
+  drag.lastX = x;
+  drag.lastY = y;
+  e.preventDefault();
+}, { passive: false });
+
+function endDrag(e){
+  if (!drag.active) return;
+  if (e && drag.pointerId != null && e.pointerId !== drag.pointerId) return;
+  drag.active = false;
+  drag.pointerId = null;
+  drag.dx = 0;
+  drag.dy = 0;
+}
+
+canvas.addEventListener("pointerup", (e) => { endDrag(e); e.preventDefault(); }, { passive:false });
+canvas.addEventListener("pointercancel", (e) => { endDrag(e); e.preventDefault(); }, { passive:false });
+canvas.addEventListener("pointerleave", () => { endDrag(); }, { passive:false });
+
 // Title: first click to show menu
 canvas.addEventListener("pointerdown", () => {
   // Title: first click to show menu
@@ -163,6 +207,16 @@ document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 // Mobile buttons
 const touch = { left:false, right:false, up:false, down:false, shot:false };
+// ===== Drag control (relative) =====
+const drag = {
+  active: false,
+  pointerId: null,
+  lastX: 0,
+  lastY: 0,
+  dx: 0,
+  dy: 0,
+};
+
 
 // End画面用：1回クリック検知
 let endClicked = false;
@@ -902,6 +956,22 @@ if (scene === Scene.End) {
   if (moveR) dx += 1;
   if (moveU) dy -= 1;
   if (moveD) dy += 1;
+
+// ===== Drag move (relative, add) =====
+if (drag.active) {
+  // 画面ピクセル → ゲーム座標変換
+  const rect = canvas.getBoundingClientRect();
+  const sx = BASE_W / rect.width;
+  const sy = BASE_H / rect.height;
+
+  dx += drag.dx * sx;
+  dy += drag.dy * sy;
+
+  // 使った分は消費
+  drag.dx = 0;
+  drag.dy = 0;
+}
+
 
   if (dx !== 0 || dy !== 0) {
     // 斜めが速くならないよう正規化
