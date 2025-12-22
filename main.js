@@ -142,7 +142,8 @@ if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","ShiftLeft","Enter"]
 window.addEventListener("keyup", (e) => keys.delete(e.code));
 
 // Mobile buttons
-const touch = { left:false, right:false, shot:false };
+const touch = { left:false, right:false, up:false, down:false, shot:false };
+
 // End画面用：1回クリック検知
 let endClicked = false;
 let endKeyPressed = false; // End画面用：Enter/Spaceの1回押し検知
@@ -159,6 +160,9 @@ function bindHold(btnId, keyName) {
 bindHold("btnLeft", "left");
 bindHold("btnRight", "right");
 bindHold("btnShot", "shot");
+bindHold("btnUp", "up");
+bindHold("btnDown", "down");
+
 
 // ---------- Audio (BGM + SE) ----------
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -869,8 +873,9 @@ if (scene === Scene.End) {
   // ★ 4方向移動（下半分に限定）
   const moveL = keys.has("ArrowLeft") || touch.left;
   const moveR = keys.has("ArrowRight") || touch.right;
-  const moveU = keys.has("ArrowUp");     // スマホは未対応（必要なら追加する）
-  const moveD = keys.has("ArrowDown");
+  const moveU = keys.has("ArrowUp")   || touch.up;
+  const moveD = keys.has("ArrowDown") || touch.down;
+
 
   let dx = 0, dy = 0;
   if (moveL) dx -= 1;
