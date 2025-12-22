@@ -3,6 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
   <title>Shooting Ultimate</title>
   <style>
     :root { --ui: rgba(255,255,255,.9); --bg: #0b0b12; }
@@ -44,10 +46,16 @@
     <canvas id="game"></canvas>
 
     <!-- Mobile Buttons -->
-    <div class="pad" id="padL">
-      <div class="btn" id="btnLeft">◀</div>
-      <div class="btn" id="btnRight">▶</div>
-    </div>
+  <div class="padL" id="padL">
+  <div class="btn" id="btnUp">▲</div>
+
+  <div class="btn" id="btnLeft">◀</div>
+  <div class="btn" id="btnRight">▶</div>
+
+  <div class="btn" id="btnDown">▼</div>
+</div>
+
+
     <div class="padR" id="padR">
       <div class="btn" id="btnShot">SHOT</div>
     </div>
