@@ -35,6 +35,13 @@ wrap.addEventListener("pointerdown", (e) => {
   // タイトル画面の「最初のタップ」等、既存処理があるので邪魔しないように
   // Play中だけドラッグ移動を有効にする
   if (scene !== Scene.Play) return;
+  // two-finger touch = activate skill (same as Shift)
+  activePointers.add(e.pointerId);
+  if (!skillTouchLatch && activePointers.size >= 2) {
+  skillTouchLatch = true;
+  tryActivateSkill();
+  }
+
 
 
 // UIボタンの操作はドラッグ扱いにしない
@@ -88,8 +95,22 @@ function endDrag(e){
   drag.dy = 0;
 }
 
-wrap.addEventListener("pointerup", (e) => { endDrag(e); e.preventDefault(); }, { passive:false });
-wrap.addEventListener("pointercancel", (e) => { endDrag(e); e.preventDefault(); }, { passive:false });
+wrap.addEventListener("pointerup", (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) skillTouchLatch = false;
+
+  endDrag(e);
+  e.preventDefault();
+}, { passive:false });
+
+wrap.addEventListener("pointercancel", (e) => {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) skillTouchLatch = false;
+
+  endDrag(e);
+  e.preventDefault();
+}, { passive:false });
+
 wrap.addEventListener("pointerleave", () => { endDrag(); }, { passive:false });
 
 // Title: first click to show menu
@@ -248,7 +269,12 @@ document.addEventListener("contextmenu", (e) => e.preventDefault());
 // Mobile buttons
 const touch = { left:false, right:false, up:false, down:false, shot:false };
 // ===== Drag control (relative) =====
+
+// ===== Two-finger trigger for Skill (Shift alternative) =====
+const activePointers = new Set();  // 画面に触れている指の集合
+let skillTouchLatch = false;       // 二本指で1回だけ発動させるため
 const drag = {
+  
   active: false,
   pointerId: null,
   lastX: 0,
@@ -955,13 +981,18 @@ if (scene === Scene.End) {
     skillGauge = clamp(skillGauge + 1 / SKILL_FILL_TIME, 0, 1);
   }
 
-  // --- Activate skill (Shift) ---
-  if (pressedOnce("ShiftLeft") && skillGauge >= 1 && skillActive === 0) {
+function tryActivateSkill(){
+  if (skillGauge >= 1 && skillActive === 0) {
     skillGauge = 0;
     skillActive = SKILL_DURATION;
     se(420, 0.10, "triangle", 0.12);
   }
+}
 
+// --- Activate skill (Shift) ---
+if (pressedOnce("ShiftLeft")) {
+  tryActivateSkill();
+}
 
   stageTime++;
 
