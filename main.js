@@ -20,6 +20,14 @@ wrap.addEventListener("touchmove", (e) => {
 
 // ===== GameOver: tap anywhere (canvas) to return Title (robust on iOS) =====
 canvas.addEventListener("pointerdown", (e) => {
+  // record tap position (for title menu hit test)
+  const r = canvas.getBoundingClientRect();
+  touch.tap = true;
+  touch.tapX = (e.clientX - r.left) * (W / r.width);
+  touch.tapY = (e.clientY - r.top)  * (H / r.height);
+
+
+
   if (scene !== Scene.Over) return;
 
   e.preventDefault(); // iOS Safari対策（タップがクリック化・ズーム化するのを防ぐ）
@@ -115,7 +123,7 @@ wrap.addEventListener("pointercancel", (e) => {
 
 wrap.addEventListener("pointerleave", () => { endDrag(); }, { passive:false });
 
-// Title: first click to show menu
+
 wrap.addEventListener("pointerdown", () => {
   // Title: first click to show menu
   if (scene === Scene.Title && !titleUnlocked) {
@@ -269,7 +277,8 @@ document.addEventListener("contextmenu", (e) => e.preventDefault());
 
 
 // Mobile buttons
-const touch = { left:false, right:false, up:false, down:false, shot:false };
+const touch = { left:false, right:false, up:false, down:false, shot:false, tap:false, tapX:0, tapY:0 };
+
 // ===== Drag control (relative) =====
 
 // ===== Two-finger trigger for Skill (Shift alternative) =====
@@ -809,17 +818,18 @@ function pressedOnce(code){
 function titleInput(){
   // まず「CLICK」解除（Enterでも解除できる）
   if (!titleUnlocked) {
-    if (pressedOnce("Enter")) {
-      titleUnlocked = true;
-      ensureAudio();
-      startBgm("title");
-      se(520, 0.06, "sine", 0.10);
-    }
-    return;
+  if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
+    titleUnlocked = true;
+    ensureAudio();
+    startBgm("title");
+    se(520, 0.06, "sine", 0.10);
   }
+  return;
+}
+
 
   // 解除後は通常メニュー操作
-  if (pressedOnce("Enter")) {
+  if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
     if (menuIndex === 0) {
       ensureAudio();
       resetRun();
@@ -840,10 +850,53 @@ function titleInput(){
   }
   if (pressedOnce("ArrowLeft")) menuIndex = (menuIndex + 2) % 3;
   if (pressedOnce("ArrowRight")) menuIndex = (menuIndex + 1) % 3;
+
+
+　  // --- Tap on menu text (mobile) ---
+  // tapX/tapY は「最後にタップした座標」が入っている前提（下で追加する）
+  if (touch.tap) {
+    touch.tap = false;
+
+    // タイトル描画で使っている座標と揃える（タイトルのメニュー表示位置）
+    const cx = W / 2;
+    const baseY = H * 0.62;   // ←あなたのタイトル描画に合わせて後で微調整OK
+    const gapY  = 42;         // ←行間（後で微調整OK）
+    const boxW  = 220;        // タップ判定の横幅
+    const boxH  = 34;         // タップ判定の縦幅
+
+    // 0: START
+    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*0)) <= boxH/2) {
+      menuIndex = 0;
+      ensureAudio();
+      resetRun();
+      scene = Scene.Play;
+      startBgm("play");
+      jingle("start");
+      return;
+    }
+    // 1: 遊び方
+    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*1)) <= boxH/2) {
+      menuIndex = 1;
+      scene = Scene.How;
+      ensureAudio();
+      startBgm("title");
+      se(520,0.06,"sine",0.08);
+      return;
+    }
+    // 2: 設定
+    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*2)) <= boxH/2) {
+      menuIndex = 2;
+      scene = Scene.Settings;
+      ensureAudio();
+      startBgm("title");
+      se(420,0.06,"sine",0.08);
+      return;
+    }
+  }
+
+
+
 }
-
-
-
 function howInput(){
   if (pressedOnce("Enter")) { scene = Scene.Title; se(520,0.06,"sine",0.08); startBgm("title"); }
 }
@@ -1524,9 +1577,9 @@ if (!titleUnlocked) {
 
   ctx.fillStyle = "#fff";
   ctx.font = "14px system-ui";
-  ctx.fillText("←/→ でメニュー切替　Enterで決定", W/2, uiY - 34);
+  ctx.fillText("タップで選択　Enterで決定", W/2, uiY - 34);
 
-  const labels = ["START", "HOW TO", "SETTINGS"];
+  const labels = ["START", "遊び方", "設定"];
   for (let i=0;i<3;i++){
     ctx.font = i===menuIndex ? "22px system-ui" : "18px system-ui";
     ctx.globalAlpha = i===menuIndex ? 1.0 : 0.65;
@@ -1548,8 +1601,7 @@ if (!titleUnlocked) {
   if (scene === Scene.How) {
     ctx.textAlign="center";
     ctx.font="26px system-ui";
-    ctx.fillText("HOW TO", W/2, 120);
-
+    ctx.fillText("遊び方", W/2, 120);
     ctx.font="14px system-ui";
     ctx.fillText("・敵を倒してスコアを稼ぐ（連続撃破で倍率UP）", W/2, 180);
     ctx.fillText("・敵を撃ち漏らすとペナルティ（ライフ or スコア）", W/2, 210);
@@ -1565,7 +1617,7 @@ if (!titleUnlocked) {
   if (scene === Scene.Settings) {
     ctx.textAlign="center";
     ctx.font="26px system-ui";
-    ctx.fillText("SETTINGS", W/2, 120);
+    ctx.fillText("設定", W/2, 120);
 
     const itemsS = [
       { name:"MASTER", v: AudioBus.master },
