@@ -30,19 +30,21 @@ canvas.addEventListener("pointerdown", (e) => {
   startBgm("title");
 }, { passive: false });
 
+// ===== Skill: two-finger touch on canvas (Shift alternative / stable on iOS) =====
+canvas.addEventListener("pointerdown", (e) => {
+  if (scene !== Scene.Play) return;
+
+  e.preventDefault(); // ピンチ・ズームに奪われないようにする
+}, { passive:false });
+
+
+
 // Drag anywhere on canvas to move the player (relative)
 wrap.addEventListener("pointerdown", (e) => {
   // タイトル画面の「最初のタップ」等、既存処理があるので邪魔しないように
   // Play中だけドラッグ移動を有効にする
   if (scene !== Scene.Play) return;
-  // two-finger touch = activate skill (same as Shift)
-  activePointers.add(e.pointerId);
-  if (!skillTouchLatch && activePointers.size >= 2) {
-  skillTouchLatch = true;
-  tryActivateSkill();
-  }
-
-
+  if (drag.active) { e.preventDefault(); return; }
 
 // UIボタンの操作はドラッグ扱いにしない
 if (e.target && e.target.closest && e.target.closest(".btn")) return;
@@ -69,7 +71,7 @@ touch.shot = true;
 
   // iOS: prevent scroll/zoom selection
   e.preventDefault();
-  canvas.setPointerCapture?.(e.pointerId);
+  wrap.setPointerCapture?.(e.pointerId);
 }, { passive: false });
 
 wrap.addEventListener("pointermove", (e) => {
