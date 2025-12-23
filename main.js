@@ -90,15 +90,6 @@ wrap.addEventListener("pointerdown", () => {
     return; // ← タップを消費（End側に流れない）
   }
 
-　// GameOver: tap to return title (mobile)
-　if (scene === Scene.GameOver) {
-  // ※あなたのタイトル復帰処理に合わせてここは1行だけ差し替え可
-  scene = Scene.Title;
-  titleUnlocked = false; // タイトルの「Click」からやり直すなら
-  return;
-　}
-
-
   // Ending: click to return title
   if (scene === Scene.End) {
     endClicked = true;
@@ -246,6 +237,8 @@ function bindHold(btnId, keyName) {
   el.addEventListener("pointerleave", off);
 }
 bindHold("btnShot", "shot");
+
+
 
 // ---------- Audio (BGM + SE) ----------
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -766,7 +759,7 @@ function titleInput(){
   }
 
   // 解除後は通常メニュー操作
-  if (pressedOnce("Enter") || pressedOnce("NumpadEnter")){
+  if (pressedOnce("Enter")) {
     if (menuIndex === 0) {
       ensureAudio();
       resetRun();
