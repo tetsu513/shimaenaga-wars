@@ -26,14 +26,25 @@ wrap.addEventListener("pointerdown", (e) => {
   // タイトル画面の「最初のタップ」等、既存処理があるので邪魔しないように
   // Play中だけドラッグ移動を有効にする
   if (scene !== Scene.Play) return;
-  // Touching the screen = keep firing (mobile)
-  touch.shot = true;
-
-  // UIボタンの操作はドラッグ扱いにしない
-  if (e.target && e.target.closest && e.target.closest(".btn")) return;
 
 
-  drag.active = true;
+// UIボタンの操作はドラッグ扱いにしない
+if (e.target && e.target.closest && e.target.closest(".btn")) return;
+
+// ドラッグ開始
+drag.active = true;
+drag.pointerId = e.pointerId;
+drag.lastX = e.clientX;
+drag.lastY = e.clientY;
+drag.dx = 0;
+drag.dy = 0;
+
+// Touching the screen = keep firing (mobile)
+touch.shot = true;
+
+
+
+
   drag.pointerId = e.pointerId;
   drag.lastX = e.clientX;
   drag.lastY = e.clientY;
