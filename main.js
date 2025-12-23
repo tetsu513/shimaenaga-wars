@@ -872,6 +872,15 @@ function settingsInput(){
   }
 }
 
+
+function tryActivateSkill(){
+  if (skillGauge >= 1 && skillActive === 0) {
+    skillGauge = 0;
+    skillActive = SKILL_DURATION;
+    se(420, 0.10, "triangle", 0.12);
+  }
+}
+
 // ---------- Main update loop ----------
 function update(){
   if (scene === Scene.Title) { titleInput(); return; }
@@ -981,13 +990,6 @@ if (scene === Scene.End) {
     skillGauge = clamp(skillGauge + 1 / SKILL_FILL_TIME, 0, 1);
   }
 
-function tryActivateSkill(){
-  if (skillGauge >= 1 && skillActive === 0) {
-    skillGauge = 0;
-    skillActive = SKILL_DURATION;
-    se(420, 0.10, "triangle", 0.12);
-  }
-}
 
 // --- Activate skill (Shift) ---
 if (pressedOnce("ShiftLeft")) {
