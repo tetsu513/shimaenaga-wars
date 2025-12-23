@@ -9,6 +9,17 @@
 // ---------- Canvas sizing (responsive) ----------
 const canvas = document.getElementById("game");
 const wrap = document.getElementById("wrap");
+// ===== GameOver: tap anywhere (canvas) to return Title (robust on iOS) =====
+canvas.addEventListener("pointerdown", (e) => {
+  if (scene !== Scene.Over) return;
+
+  e.preventDefault(); // iOS Safari対策（タップがクリック化・ズーム化するのを防ぐ）
+  scene = Scene.Title;
+  titleUnlocked = false;
+  menuIndex = 0;
+  se(520,0.06,"sine",0.08);
+  startBgm("title");
+}, { passive: false });
 
 // Drag anywhere on canvas to move the player (relative)
 wrap.addEventListener("pointerdown", (e) => {
@@ -89,15 +100,7 @@ wrap.addEventListener("pointerdown", () => {
     }
     return; // ← タップを消費（End側に流れない）
   }
-  // GameOver: tap to return title (mobile)
-  if (scene === Scene.Over) {
-  scene = Scene.Title;
-  titleUnlocked = false;
-  menuIndex = 0;
-  se(520,0.06,"sine",0.08);
-  startBgm("title");
-  return;
-}
+
   // Ending: click to return title
   if (scene === Scene.End) {
     endClicked = true;
@@ -1541,7 +1544,7 @@ if (!titleUnlocked) {
     ctx.fillText("GAME OVER", W/2, H/2 - 30);
     ctx.font="16px system-ui";
     ctx.fillText(`SCORE ${score} / HI ${highScore}`, W/2, H/2 + 10);
-    ctx.fillText("Enterでタイトルへ", W/2, H/2 + 44);
+    ctx.fillText("タップでタイトルへ（PCはEnter）", W/2, H/2 + 44);
     ctx.textAlign="start";
     ctx.restore();
     return;
