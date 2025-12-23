@@ -125,41 +125,44 @@ wrap.addEventListener("pointerleave", () => { endDrag(); }, { passive:false });
 
 
 wrap.addEventListener("pointerdown", () => {
-  // Title: first click to show menu
-  if (scene === Scene.Title && !titleUnlocked) {
-    titleUnlocked = true;
-    ensureAudio();
-    startBgm("title");
-    se(520, 0.06, "sine", 0.10);
+
+  // ① 遊び方オーバーレイが開いていたら最優先で閉じる
+  if (scene === Scene.Title && titleUnlocked && howOverlay) {
+    howOverlay = false;
+    menuIndex = 0;
+    se(520,0.06,"sine",0.08);
     return;
   }
 
-    // Title: tap to decide (mobile)
-  if (scene === Scene.Title && titleUnlocked) {
-    if (menuIndex === 0) {
-      ensureAudio();
-      resetRun();
-      scene = Scene.Play;
-      startBgm("play");
-      jingle("start");
-    } else if (menuIndex === 1) {
-      scene = Scene.How;
-      ensureAudio();
-      startBgm("title");
-      se(520,0.06,"sine",0.08);
-    } else {
-      scene = Scene.Settings;
-      ensureAudio();
-      startBgm("title");
-      se(420,0.06,"sine",0.08);
-    }
-    return; // ← タップを消費（End側に流れない）
+  // ② 設定オーバーレイが開いていたら最優先で閉じる（保存）
+  if (scene === Scene.Title && titleUnlocked && settingsOverlay) {
+    settingsOverlay = false;
+    saveSettings();
+    menuIndex = 0;
+    se(520,0.06,"sine",0.08);
+    return;
   }
 
-  // Ending: click to return title
+  // ③ 最初の1回目クリック：CLICK解除専用
+  if (scene === Scene.Title && !titleUnlocked) {
+    // ★このクリックはメニュー当たり判定に使わない
+    touch.tap = false;
+    touch.tapX = 0;
+    touch.tapY = 0;
+
+    titleUnlocked = true;
+    ensureAudio();
+    startBgm("title");
+    se(520,0.06,"sine",0.10);
+    return;
+  }
+
+  // ④ エンディングからタイトルへ戻る（既存仕様）
   if (scene === Scene.End) {
     endClicked = true;
+    return;
   }
+
 }, { passive: true });
 
 
@@ -414,8 +417,12 @@ function fadeOutBgm(time = 0.35) {
 // ---------- Game State / Scenes ----------
 const Scene = { Title:"title", How:"how", Settings:"settings", Play:"play", Over:"over", End:"end" };
 let scene = Scene.Title;
-
 let tick = 0;
+// ★ 追加：クリック時に一瞬光らせるための遷移予約
+let pendingAction = null;
+let pendingFrames = 0;
+
+
 let score = 0;
 let highScore = Number(localStorage.getItem("stg_highscore") || "0");
 
@@ -804,7 +811,11 @@ function playerHit(){
 // ---------- Scene UI (menu) ----------
 let titleUnlocked = false; // 最初はCLICK表示、クリック後にメニュー表示
 let menuIndex = 0;
+let howOverlay = false; // ★Title上に「遊び方」説明を出すトグル
 let settingsIndex = 0;
+let settingsOverlay = false; // ★Title上に「設定」パネルを出すトグル
+
+
 
 function pressedOnce(code){
   if (!pressedOnce.prev) pressedOnce.prev = new Set();
@@ -816,8 +827,24 @@ function pressedOnce(code){
 }
 
 function titleInput(){
+   // ★ 追加：前フレームで予約された遷移を実行
+  if (pendingFrames > 0) {
+    pendingFrames--;
+    if (pendingFrames === 0 && pendingAction) {
+      const fn = pendingAction;
+      pendingAction = null;
+      fn();
+      return; // ← 実行したフレームでは他の入力を処理しない
+    }
+  }
   // まず「CLICK」解除（Enterでも解除できる）
   if (!titleUnlocked) {
+    // ★設定パネルが開いている間は、設定操作を優先（Title上でも音量調整できるようにする）
+if (titleUnlocked && settingsOverlay) {
+  settingsInput(); // 既存の設定入力を流用
+  return;
+}
+
   if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
     titleUnlocked = true;
     ensureAudio();
@@ -826,6 +853,14 @@ function titleInput(){
   }
   return;
 }
+
+// ★オーバーレイ表示中は、メニュー選択（menuIndex移動）よりオーバーレイ操作を優先
+if (titleUnlocked && (howOverlay || settingsOverlay)) {
+  if (settingsOverlay) settingsInput(); // ← 音量調整はここでやる
+  // howOverlay は「読むだけ」なのでキー操作不要（必要なら後で追加）
+  return; // ← これで下の ArrowLeft/Right が menuIndex を動かさなくなる
+}
+
 
 
   // 解除後は通常メニュー操作
@@ -836,65 +871,99 @@ function titleInput(){
       scene = Scene.Play;
       startBgm("play");
       jingle("start");
+
     } else if (menuIndex === 1) {
-      scene = Scene.How;
-      ensureAudio();
-      startBgm("title");
-      se(520,0.06,"sine",0.08);
-    } else {
-      scene = Scene.Settings;
-      ensureAudio();
-      startBgm("title");
-      se(420,0.06,"sine",0.08);
-    }
+  // ★遊び方：Title画面の上で説明を出す/消す
+  howOverlay = !howOverlay;
+  if (howOverlay) {
+    menuIndex = 1; // 遊び方を光らせる
+    ensureAudio();
+    startBgm("title");
+    se(520,0.06,"sine",0.08);
+  } else {
+    menuIndex = 0; // 閉じたら選択も外す
+    se(520,0.06,"sine",0.08);
+  }
+
+} else {
+  // ★設定：Title画面の上で設定パネルを出す/消す
+  settingsOverlay = !settingsOverlay;
+  if (settingsOverlay) {
+    menuIndex = 2; // 設定を光らせる
+    ensureAudio();
+    startBgm("title");
+    se(420,0.06,"sine",0.08);
+  } else {
+    saveSettings();
+    menuIndex = 0; // 閉じたら選択も外す
+    se(520,0.06,"sine",0.08);
+  }
+}
+
   }
   if (pressedOnce("ArrowLeft")) menuIndex = (menuIndex + 2) % 3;
   if (pressedOnce("ArrowRight")) menuIndex = (menuIndex + 1) % 3;
 
 
-　  // --- Tap on menu text (mobile) ---
-  // tapX/tapY は「最後にタップした座標」が入っている前提（下で追加する）
-  if (touch.tap) {
-    touch.tap = false;
+// --- Tap on menu text (mobile) ---
+if (touch.tap) {
+  touch.tap = false;
 
-    // タイトル描画で使っている座標と揃える（タイトルのメニュー表示位置）
-    const cx = W / 2;
-    const baseY = H * 0.62;   // ←あなたのタイトル描画に合わせて後で微調整OK
-    const gapY  = 42;         // ←行間（後で微調整OK）
-    const boxW  = 220;        // タップ判定の横幅
-    const boxH  = 34;         // タップ判定の縦幅
+  // ★タイトル描画と同じ座標で当たり判定を作る（横並び）
+  // ここは「描画側で labels を出している座標」に合わせる
+  const uiY = Math.floor(H * 0.84);
+  const y    = uiY + 10;   // ← ctx.fillText(..., ..., uiY + 10) と合わせる
+  const hitW = 140;        // 横の当たり幅（文字＋余白）
+  const hitH = 40;         // 縦の当たり幅
 
-    // 0: START
-    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*0)) <= boxH/2) {
-      menuIndex = 0;
-      ensureAudio();
-      resetRun();
-      scene = Scene.Play;
-      startBgm("play");
-      jingle("start");
-      return;
-    }
-    // 1: 遊び方
-    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*1)) <= boxH/2) {
-      menuIndex = 1;
-      scene = Scene.How;
-      ensureAudio();
-      startBgm("title");
-      se(520,0.06,"sine",0.08);
-      return;
-    }
-    // 2: 設定
-    if (Math.abs(touch.tapX - cx) <= boxW/2 && Math.abs(touch.tapY - (baseY + gapY*2)) <= boxH/2) {
-      menuIndex = 2;
-      scene = Scene.Settings;
-      ensureAudio();
-      startBgm("title");
-      se(420,0.06,"sine",0.08);
-      return;
-    }
+  for (let i = 0; i < 3; i++) {
+    const x = W / 2 + (i - 1) * 140; // ←描画と同じ式
+
+if (Math.abs(touch.tapX - x) <= hitW / 2 && Math.abs(touch.tapY - y) <= hitH / 2) {
+  menuIndex = i;        // クリックした項目を選択扱いに（※見た目で見えるかは遷移速度次第）
+  touch.tap = false;    // クリックを消費（持ち越し防止）
+
+  if (i === 0) {
+    // START
+    ensureAudio();
+    resetRun();
+    scene = Scene.Play;
+    startBgm("play");
+    jingle("start");
+    return;
+
+} else if (i === 1) {
+  // ★遊び方：Title画面の上で説明を出す/消す
+  howOverlay = !howOverlay;
+  if (howOverlay) {
+    menuIndex = 1; // 遊び方を光らせる
+    ensureAudio();
+    startBgm("title");
+    se(520, 0.06, "sine", 0.08);
+  } else {
+    menuIndex = 0; // 閉じたら選択も外す
+    se(520, 0.06, "sine", 0.08);
   }
+  return;
 
-
+} else {
+  // ★設定：Title画面の上で設定パネルを出す/消す
+  settingsOverlay = !settingsOverlay;
+  if (settingsOverlay) {
+    menuIndex = 2;
+    ensureAudio();
+    startBgm("title");
+    se(420, 0.06, "sine", 0.08);
+  } else {
+    saveSettings();
+    menuIndex = 0;
+    se(520, 0.06, "sine", 0.08);
+  }
+  return;
+}
+}
+  }
+}
 
 }
 function howInput(){
@@ -903,15 +972,22 @@ function howInput(){
 
 function settingsInput(){
   const step = 0.05;
-  if (pressedOnce("ArrowLeft")) settingsIndex = (settingsIndex + 2) % 3;
-  if (pressedOnce("ArrowRight")) settingsIndex = (settingsIndex + 1) % 3;
+// ★項目切替は上下キーにする（MASTER/BGM/SE）
+if (pressedOnce("ArrowUp"))   settingsIndex = (settingsIndex + 2) % 3;
+if (pressedOnce("ArrowDown")) settingsIndex = (settingsIndex + 1) % 3;
 
-  if (pressedOnce("Enter")) {
-    saveSettings();
-    scene = Scene.Title;
-    se(520,0.06,"sine",0.08);
-    startBgm("title");
-  }
+
+if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
+  saveSettings();
+
+  // ★Title上の設定オーバーレイを閉じる
+  settingsOverlay = false;
+  menuIndex = 0;
+
+  se(520,0.06,"sine",0.08);
+  startBgm("title");
+}
+
 
   if (keys.has("ArrowLeft")) {
     if (settingsIndex === 0) AudioBus.master = clamp(AudioBus.master - step/30, 0, 1);
@@ -925,6 +1001,7 @@ function settingsInput(){
     if (settingsIndex === 2) AudioBus.se = clamp(AudioBus.se + step/30, 0, 1);
     updateBgmVolume();
   }
+  
 }
 
 
@@ -1579,17 +1656,101 @@ if (!titleUnlocked) {
   ctx.font = "14px system-ui";
   ctx.fillText("タップで選択　Enterで決定", W/2, uiY - 34);
 
-  const labels = ["START", "遊び方", "設定"];
-  for (let i=0;i<3;i++){
-    ctx.font = i===menuIndex ? "22px system-ui" : "18px system-ui";
-    ctx.globalAlpha = i===menuIndex ? 1.0 : 0.65;
-    ctx.fillText(labels[i], W/2 + (i-1)*140, uiY + 10);
-  }
-  ctx.globalAlpha = 1.0;
+const labels = ["START", "遊び方", "設定"];
+for (let i=0;i<3;i++){
+  const x = W/2 + (i-1)*140;
+  const y = uiY + 10;
+
+  const sel = (i === menuIndex);
+
+  ctx.font = sel ? "22px system-ui" : "18px system-ui";
+  ctx.globalAlpha = sel ? 1.0 : 0.70;
+
+  // ★読みやすさ：黒縁取り
+  ctx.lineWidth = sel ? 5 : 4;
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.strokeText(labels[i], x, y);
+
+  // ★選択中だけ控えめに光らせる（白が潰れにくい程度）
+  ctx.shadowColor = "rgba(255,255,255,0.65)";
+  ctx.shadowBlur  = sel ? 10 : 0;
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(labels[i], x, y);
+
+  ctx.shadowBlur = 0; // 後に影を残さない
+}
+ctx.globalAlpha = 1.0;
+
+
+
 
   ctx.font = "12px system-ui";
   ctx.globalAlpha = 0.9;
-  ctx.fillText("スマホは下のボタンでも遊べる", W/2, uiY + 55);
+  // ★Title上に「遊び方」説明パネル
+if (howOverlay) {
+  // 背景パネル
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(40, 160, W - 80, 230);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+
+  ctx.font = "22px system-ui";
+  ctx.fillText("遊び方", W/2, 195);
+
+  ctx.font = "14px system-ui";
+  ctx.fillText("・敵を倒してスコアを稼ぐ（連続撃破で倍率UP）", W/2, 235);
+  ctx.fillText("・敵を撃ち漏らすとペナルティ（ライフ or スコア）", W/2, 262);
+  ctx.fillText("・アイテム：＋回復 / 3=3WAY / L=LASER", W/2, 289);
+  ctx.fillText("・ボスは“コア（中央）”だけが弱点！", W/2, 316);
+
+  ctx.globalAlpha = 0.9;
+  ctx.font = "12px system-ui";
+  ctx.fillText("（画面をクリック/タップで閉じる）", W/2, 352);
+  ctx.globalAlpha = 1.0;
+}
+
+
+// ★Title上に「設定」パネル
+if (settingsOverlay) {
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(40, 160, W - 80, 300);
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.font = "22px system-ui";
+  ctx.fillText("設定", W/2, 195);
+
+  const itemsS = [
+    { name:"MASTER", v: AudioBus.master },
+    { name:"BGM",    v: AudioBus.bgm },
+    { name:"SE",     v: AudioBus.se },
+  ];
+
+  ctx.font = "14px system-ui";
+  ctx.globalAlpha = 0.9;
+  ctx.fillText("↑/↓で項目切替　←/→押しっぱで調整　Enter/クリックで閉じる", W/2, 235);
+  ctx.globalAlpha = 1.0;
+
+  for (let i=0;i<3;i++){
+    const y = 290 + i*70;
+
+    ctx.globalAlpha = i===settingsIndex ? 1.0 : 0.55;
+    ctx.font = i===settingsIndex ? "18px system-ui" : "16px system-ui";
+    ctx.fillText(`${itemsS[i].name}: ${(itemsS[i].v*100)|0}%`, W/2, y);
+
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(W/2 - 140, y + 18, 280, 10);
+
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(W/2 - 140, y + 18, 280 * itemsS[i].v, 10);
+  }
+  ctx.globalAlpha = 1.0;
+}
+
+
+
   ctx.globalAlpha = 1.0;
 
   ctx.textAlign = "start";
