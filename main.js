@@ -9,6 +9,15 @@
 // ---------- Canvas sizing (responsive) ----------
 const canvas = document.getElementById("game");
 const wrap = document.getElementById("wrap");
+// iOS Safari: prevent text-selection loupe / callout during play
+wrap.addEventListener("touchstart", (e) => {
+  if (scene === Scene.Play) e.preventDefault();
+}, { passive: false });
+
+wrap.addEventListener("touchmove", (e) => {
+  if (scene === Scene.Play) e.preventDefault();
+}, { passive: false });
+
 // ===== GameOver: tap anywhere (canvas) to return Title (robust on iOS) =====
 canvas.addEventListener("pointerdown", (e) => {
   if (scene !== Scene.Over) return;
