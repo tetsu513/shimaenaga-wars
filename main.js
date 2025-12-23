@@ -89,7 +89,15 @@ wrap.addEventListener("pointerdown", () => {
     }
     return; // ← タップを消費（End側に流れない）
   }
-
+  // GameOver: tap to return title (mobile)
+  if (scene === Scene.Over) {
+  scene = Scene.Title;
+  titleUnlocked = false;
+  menuIndex = 0;
+  se(520,0.06,"sine",0.08);
+  startBgm("title");
+  return;
+}
   // Ending: click to return title
   if (scene === Scene.End) {
     endClicked = true;
@@ -820,7 +828,7 @@ function update(){
   if (scene === Scene.How) { howInput(); return; }
   if (scene === Scene.Settings) { settingsInput(); return; }
   if (scene === Scene.Over) {
-    if (pressedOnce("Enter")) { 
+    if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
         scene = Scene.Title; 
         titleUnlocked = false;
         menuIndex = 0;
