@@ -206,6 +206,9 @@ const opImages = {
 };
 opImages[1].src = "assets/op1.png";
 opImages[2].src = "assets/op2.png";
+// --- Ending image ---
+const edImg = new Image();
+edImg.src = "assets/ed.png";
 
 
 // --- Enemy sprites ---
@@ -399,6 +402,66 @@ function se(freq=440, time=0.06, type="square", vol=0.12) {
   o.stop(audioCtx.currentTime + time);
 }
 
+// 3-Way shot SE (heavy, punchy)
+function se3Way(){
+  ensureAudio();
+  const t = audioCtx.currentTime;
+
+  // Layer A: body (low, short)
+  const o1 = audioCtx.createOscillator();
+  const g1 = audioCtx.createGain();
+  o1.type = "sawtooth";
+  o1.frequency.setValueAtTime(240, t);
+  o1.frequency.exponentialRampToValueAtTime(140, t + 0.06);
+
+  const v1 = 0.16 * AudioBus.se * AudioBus.master;
+  g1.gain.setValueAtTime(0.0001, t);
+  g1.gain.exponentialRampToValueAtTime(v1, t + 0.006);
+  g1.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+
+  o1.connect(g1).connect(audioCtx.destination);
+  o1.start(t);
+  o1.stop(t + 0.09);
+
+  // Layer B: click/edge (tiny, very short)
+  const o2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  o2.type = "square";
+  o2.frequency.setValueAtTime(1100, t);
+
+  const v2 = 0.06 * AudioBus.se * AudioBus.master;
+  g2.gain.setValueAtTime(0.0001, t);
+  g2.gain.exponentialRampToValueAtTime(v2, t + 0.003);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.02);
+
+  o2.connect(g2).connect(audioCtx.destination);
+  o2.start(t);
+  o2.stop(t + 0.03);
+
+  // Layer C: airy noise (very subtle)
+  // (white noise via buffer; short)
+  const dur = 0.03;
+  const sr = audioCtx.sampleRate;
+  const n = Math.floor(sr * dur);
+  const buf = audioCtx.createBuffer(1, n, sr);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * 0.25;
+
+  const ns = audioCtx.createBufferSource();
+  ns.buffer = buf;
+
+  const ng = audioCtx.createGain();
+  const v3 = 0.035 * AudioBus.se * AudioBus.master;
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.exponentialRampToValueAtTime(v3, t + 0.004);
+  ng.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+  ns.connect(ng).connect(audioCtx.destination);
+  ns.start(t);
+  ns.stop(t + dur);
+}
+
+
 // Normal shot SE (cool, not chiptune)
 function seShot(){
   ensureAudio();
@@ -533,7 +596,15 @@ let stageClearDelayNext = 0;    // 次に進むステージ番号
 // ===== Ending (after Stage 3 clear) =====
 let endingTimer = 0;        // 経過フレーム
 let endingCharN = 0;        // ナレーションの表示文字数（タイプ風）
-const ENDING_TEXT = "こうして世界の平和は、シマエナガによって守られたのだった。";
+// --- Ending text (novel style) ---
+const END_TEXTS = [
+  "人類最終兵器シマエナガは、侵略者たちの母艦を殲滅した",
+  "こうして、世界に平和が訪れた",
+  "タイトルに戻る",
+];
+
+// エンディング進行用
+let endMsgIndex = 0;   // 今何行目か
 
 // ===== Debug (remove for release) =====
 const DEBUG = true; //これをfalseにすれば無敵モードは無効になる
@@ -958,7 +1029,7 @@ function fireThree(){
     bullets.push({ x:player.x, y:player.y-18, r:4, vx:Math.sin(a)*s, vy:-Math.cos(a)*s });
   });
   player.fireCd = 11;
-  se(560,0.05,"square",0.08);
+  se3Way(); // ★重厚3WAY SE
 }
 
 function fireLaserPulse(){
@@ -1481,6 +1552,7 @@ if (stageClearDelay > 0) {
       scene = Scene.End;
       endingTimer = 0;
       endingCharN = 0;
+      endMsgIndex = 0;
       endClicked = false;
       endKeyPressed = false;
     }
@@ -1489,23 +1561,42 @@ if (stageClearDelay > 0) {
 
 
   
-  // --- Ending: click to return title ---
+// --- Ending: novel style (click/tap to advance) ---
 if (scene === Scene.End) {
-  const ready = (endingCharN >= ENDING_TEXT.length);
+  const line = END_TEXTS[endMsgIndex] || "";
+  const readyLine = (endingCharN >= line.length);
 
-  // クリックは pointerdown で endClicked=true にしている
-if (ready && (endClicked || endKeyPressed)) {
-endClicked = false;    // 消費
-endKeyPressed = false; // 消費
-
-  shake = 0;
-  flash = 0;
-  hitStop = 0;
-
-scene = Scene.Title;
-startBgm("title");
-
+  // タイピング進行（毎フレーム1文字。速すぎるなら 2フレに1回などにしてもOK）
+  if (!readyLine) {
+    endingCharN++;
   }
+
+  // クリック/タップ/キー入力（pointerdown で endClicked=true になっている）
+  if (endClicked || endKeyPressed) {
+    endClicked = false;    // 消費
+    endKeyPressed = false; // 消費
+
+    if (!readyLine) {
+      // 途中なら一気に全文表示
+      endingCharN = line.length;
+    } else {
+      // 次の行へ
+      if (endMsgIndex < END_TEXTS.length - 1) {
+        endMsgIndex++;
+        endingCharN = 0;
+      } else {
+        // 最後まで行ったらタイトルへ
+        shake = 0;
+        flash = 0;
+        hitStop = 0;
+
+        scene = Scene.Title;
+        startBgm("title");
+      }
+    }
+  }
+
+  return;
 }
 
 
@@ -1959,36 +2050,65 @@ function draw(){
     return;
   }
 
-  // ===== Ending Screen =====
-  if (scene === Scene.End) {
-    // 平和な背景：とりあえずStage1背景を流用（差し替えたいならここだけ変更）
-    const bg = bgImages[1];
-    if (bg && bg.complete) ctx.drawImage(bg, 0, 0, W, H);
-    else { ctx.fillStyle = "#aee7ff"; ctx.fillRect(0,0,W,H); }
+ // ===== Ending Screen =====
+// ===== Ending Screen =====
+if (scene === Scene.End) {
+  // 背景：ed.png
+  if (edImg && edImg.complete) ctx.drawImage(edImg, 0, 0, W, H);
+  else { ctx.fillStyle = "#000"; ctx.fillRect(0,0,W,H); }
 
-    // うっすら暗幕（文字を読みやすく）
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fillRect(0, 0, W, H);
+  // 下部のテキストボックス（Openingと同じ見た目）
+  const boxH = 140;
+  const boxX = 22;
+  const boxY = H - boxH - 22;
+  const boxW = W - 44;
 
-    // ナレーション
-    ctx.fillStyle = "#fff";
-    ctx.font = "18px system-ui";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(40,40,40,0.70)";
+  ctx.fillRect(boxX, boxY, boxW, boxH);
 
-    const msg = ENDING_TEXT.slice(0, endingCharN);
-    ctx.fillText(msg, W/2, H*0.42);
+  ctx.strokeStyle = "rgba(255,255,255,0.25)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-    // 促し
-    ctx.font = "14px system-ui";
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.fillText("クリックでタイトルへ", W/2, H*0.62);
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.font = "18px system-ui, -apple-system, Segoe UI, sans-serif";
+  ctx.textBaseline = "top";
 
-    // ここで終了（Play描画などをさせない）
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    return;
+  // ★いま表示する行（あなたのEND_TEXTS / endMsgIndex / endingCharN を前提）
+  const text = (END_TEXTS[endMsgIndex] ?? "").slice(0, endingCharN);
+
+  // ざっくり折返し（Openingと同じ）
+  const maxW = boxW - 26;
+  const x = boxX + 13;
+  let y = boxY + 16;
+
+  let line = "";
+  for (const ch of text) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxW) {
+      ctx.fillText(line, x, y);
+      y += 24;
+      line = ch;
+    } else {
+      line = test;
+    }
   }
+  if (line) ctx.fillText(line, x, y);
+
+  // 「▶」進行サイン（行が出切っている時だけ出す）
+  const fullLine = END_TEXTS[endMsgIndex] ?? "";
+  if (endingCharN >= fullLine.length) {
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText("▶", W - 50, H - 50);
+  }
+
+  // 他の描画へ行かない
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  return;
+}
+
+
 
 
   // --- draw background ---
