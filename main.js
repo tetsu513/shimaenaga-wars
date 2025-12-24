@@ -171,6 +171,13 @@ wrap.addEventListener("pointerdown", () => {
     return;
   }
 
+  // ★ Opening中：クリックで次へ
+  if (scene === Scene.Opening) {
+    opening.wantNext = true;
+    return;
+  }
+
+
   // ④ エンディングからタイトルへ戻る（既存仕様）
   if (scene === Scene.End) {
     endClicked = true;
@@ -191,6 +198,15 @@ bgImages[0].src = "assets/title.png";
 bgImages[1].src = "assets/bg_stage1.png";
 bgImages[2].src = "assets/bg_stage2.png";
 bgImages[3].src = "assets/bg_stage3.png";
+
+// --- Opening images ---
+const opImages = {
+  1: new Image(),
+  2: new Image(),
+};
+opImages[1].src = "assets/op1.png";
+opImages[2].src = "assets/op2.png";
+
 
 // --- Enemy sprites ---
 const enemyImgs = {
@@ -473,7 +489,15 @@ function fadeOutBgm(time = 0.35) {
 }
 
 // ---------- Game State / Scenes ----------
-const Scene = { Title:"title", How:"how", Settings:"settings", Play:"play", Over:"over", End:"end" };
+const Scene = {
+  Title: "title",
+  Opening: "opening", // ★追加
+  How: "how",
+  Settings: "settings",
+  Play: "play",
+  Over:"over", 
+  End:"end" };
+
 let scene = Scene.Title;
 let tick = 0;
 // ★ 追加：クリック時に一瞬光らせるための遷移予約
@@ -978,6 +1002,210 @@ let menuIndex = 0;
 let howOverlay = false; // ★Title上に「遊び方」説明を出すトグル
 let settingsIndex = 0;
 let settingsOverlay = false; // ★Title上に「設定」パネルを出すトグル
+// ---------- Opening (novel style) ----------
+const OPEN_TEXTS = [
+  "20XX年、地球に宇宙人が襲来した",
+  "人類は必死に抵抗したが、徐々に追い詰められていった",
+  "しかし、人類にも希望の光が差し込んだ",
+  "最終兵器ーシマエナガー CodeName:Simaenagaが実戦投入されたのである",
+  "これはシマエナガと侵略者たちの戦いの記録である",
+];
+
+let opening = {
+  active: false,
+  phase: 0,      // 0: 暗転中 → 1: op1表示 → 2: 切替暗転 → 3: op2表示 → 4: 終了暗転
+  alpha: 0,      // フェード用(0..1)
+  msgIndex: -1,  // 表示テキスト index（-1は未表示）
+  revealing: true, // ★追加：背景を黒からフェードイン中か
+  wantNext: false,
+};
+
+function startOpening(){
+  // 既存のTitleの状態を閉じる
+  howOverlay = false;
+  settingsOverlay = false;
+
+  opening.active = true;
+  opening.phase = 0;
+  opening.alpha = 0;
+  opening.msgIndex = -1;
+  opening.wantNext = false;
+  opening.revealing = true;
+
+
+  // タイトルBGMのまま開始でもOK。ここで止めたいなら fadeOutBgm() でも良い。
+  scene = Scene.Opening;
+}
+
+function openingConsumeNext(){
+  if (opening.wantNext) {
+    opening.wantNext = false;
+    return true;
+  }
+  return false;
+}
+
+// クリック/タップ/キーで進む（wantNext を消費して段階を進める）
+function openingUpdate(){
+  // 進む入力
+  const nextKey =
+    pressedOnce("Enter") || pressedOnce("NumpadEnter") ||
+    pressedOnce("Space");
+
+  const nextTap = touch.tap; // 既存の pointerdown で立つ前提
+  if (nextTap) touch.tap = false;
+
+  if (nextKey || nextTap) opening.wantNext = true;
+
+  // フェード速度（お好みで）
+  const FADE_SPD = 0.02;
+
+  // phaseごとの進行
+if (opening.phase === 0) {
+  // まずは黒だけをフェードイン（背景は描かない）
+  opening.alpha = Math.min(1, opening.alpha + FADE_SPD);
+  if (opening.alpha >= 1) {
+    opening.phase = 1;
+    opening.alpha = 1;      // 次はこの黒をフェードアウトして背景①を出す
+    opening.msgIndex = -1;  // まだ文章は出さない
+    opening.revealing = true;
+  }
+  return;
+}
+
+
+  if (opening.phase === 1) {
+  // 背景①を黒からフェードインする（最初だけ）
+  if (opening.revealing) {
+    opening.alpha = Math.max(0, opening.alpha - FADE_SPD);
+    if (opening.alpha <= 0) {
+      opening.alpha = 0;
+      opening.revealing = false;
+      opening.msgIndex = 0; // 背景が出たら初めて文章を表示
+    }
+    return; // reveal中はクリック進行させない
+  }
+
+    // op1 表示中：クリックで文章を進める（0→1）
+    if (openingConsumeNext()) {
+      if (opening.msgIndex < 1) opening.msgIndex++;
+      else {
+        // 2文終わったら切替暗転へ
+        opening.phase = 2;
+        opening.alpha = 0; // ここは「暗転用の黒」を別で描くので0スタート
+      }
+    }
+    return;
+  }
+
+  if (opening.phase === 2) {
+    // op1→op2 切替：黒をフェードイン（暗転）
+    opening.alpha = Math.min(1, opening.alpha + FADE_SPD);
+    if (opening.alpha >= 1) {
+      opening.phase = 3;
+      opening.alpha = 1;
+      opening.msgIndex = 2; // 3文目から
+    }
+    return;
+  }
+
+  if (opening.phase === 3) {
+    // op2 表示中：クリックで文章を進める（2→3→4）
+    if (openingConsumeNext()) {
+      if (opening.msgIndex < 4) opening.msgIndex++;
+      else {
+        // 最後まで行ったら終了暗転へ
+        opening.phase = 4;
+        opening.alpha = 0;
+      }
+    }
+    return;
+  }
+
+  if (opening.phase === 4) {
+    // 終了暗転 → Play開始
+    opening.alpha = Math.min(1, opening.alpha + FADE_SPD);
+    if (opening.alpha >= 1) {
+      // ここでゲーム開始
+      opening.active = false;
+
+      resetRun();
+      scene = Scene.Play;
+      startBgm("play");
+      jingle("start");
+    }
+    return;
+  }
+}
+
+// 描画（draw()側から呼ぶ）
+function drawOpening(ctx){
+  // phase0（暗転中）は背景を描かず、黒だけにする（チラ見え防止）
+  if (opening.phase === 0) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0,0,W,H);
+  } else {
+    // ベース画像
+    const img = (opening.phase <= 2) ? opImages[1] : opImages[2];
+    if (img && img.complete) {
+      ctx.drawImage(img, 0, 0, W, H);
+    } else {
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0,0,W,H);
+    }
+  }
+
+
+  // テキストボックス（下部グレー）
+  if (opening.phase === 1 || opening.phase === 3) {
+    const boxH = 140;
+    ctx.fillStyle = "rgba(40,40,40,0.70)";
+    ctx.fillRect(22, H - boxH - 22, W - 44, boxH);
+
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(22, H - boxH - 22, W - 44, boxH);
+
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.font = "18px system-ui, -apple-system, Segoe UI, sans-serif";
+    ctx.textBaseline = "top";
+
+    const text = OPEN_TEXTS[opening.msgIndex] ?? "";
+    // ざっくり折返し（簡易）
+    const maxW = W - 44 - 26;
+    const x = 22 + 13;
+    let y = H - boxH - 22 + 16;
+
+    let line = "";
+    for (const ch of text) {
+      const test = line + ch;
+      if (ctx.measureText(test).width > maxW) {
+        ctx.fillText(line, x, y);
+        y += 24;
+        line = ch;
+      } else {
+        line = test;
+      }
+    }
+    if (line) ctx.fillText(line, x, y);
+
+    // 「▶」みたいな進行サイン
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.fillText("▶", W - 50, H - 50);
+  }
+
+  // フェード（phase0は暗転IN、phase2/4は暗転IN）
+  if (opening.phase === 0) {
+    // 暗転IN（タイトル→真っ黒）
+    ctx.fillStyle = `rgba(0,0,0,${opening.alpha})`;
+    ctx.fillRect(0,0,W,H);
+  } else if (opening.phase === 1 || opening.phase === 2 || opening.phase === 4) {
+    // 切替/終了の暗転IN
+    ctx.fillStyle = `rgba(0,0,0,${opening.alpha})`;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
 
 
 
@@ -1030,11 +1258,8 @@ if (titleUnlocked && (howOverlay || settingsOverlay)) {
   // 解除後は通常メニュー操作
   if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
     if (menuIndex === 0) {
-      ensureAudio();
-      resetRun();
-      scene = Scene.Play;
-      startBgm("play");
-      jingle("start");
+    ensureAudio();
+    startOpening(); // ★ここでオープニングへ
 
     } else if (menuIndex === 1) {
   // ★遊び方：Title画面の上で説明を出す/消す
@@ -1089,12 +1314,10 @@ if (Math.abs(touch.tapX - x) <= hitW / 2 && Math.abs(touch.tapY - y) <= hitH / 2
 
   if (i === 0) {
     // START
-    ensureAudio();
-    resetRun();
-    scene = Scene.Play;
-    startBgm("play");
-    jingle("start");
-    return;
+  ensureAudio();
+  startOpening();
+  return;
+
 
 } else if (i === 1) {
   // ★遊び方：Title画面の上で説明を出す/消す
@@ -1179,9 +1402,12 @@ function tryActivateSkill(){
 
 // ---------- Main update loop ----------
 function update(){
+  if (scene === Scene.Opening) { openingUpdate(); return; }
   if (scene === Scene.Title) { titleInput(); return; }
   if (scene === Scene.How) { howInput(); return; }
   if (scene === Scene.Settings) { settingsInput(); return; }
+
+
   if (scene === Scene.Over) {
     if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
     shake = 0;
@@ -1727,6 +1953,12 @@ const interval = intervalBase + phase2Bonus + stageBonus;
 
 // ---------- Draw ----------
 function draw(){
+  // ===== Opening Screen =====
+  if (scene === Scene.Opening) {
+    drawOpening(ctx);
+    return;
+  }
+
   // ===== Ending Screen =====
   if (scene === Scene.End) {
     // 平和な背景：とりあえずStage1背景を流用（差し替えたいならここだけ変更）
