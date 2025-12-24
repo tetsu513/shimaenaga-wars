@@ -2344,15 +2344,22 @@ for (const e of enemies) {
     } else if (it.type==="three") {
       ctx.fillStyle="#7aa7ff";
       ctx.beginPath(); ctx.arc(it.x,it.y,it.r,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#0b2a6b"; ctx.font="10px system-ui"; ctx.textAlign="center";
+      ctx.fillStyle="#0b2a6b"; 
+      ctx.font="10px system-ui"; 
+      ctx.textAlign="center";
+      ctx.textBaseline="middle";
       ctx.fillText("3", it.x, it.y+3);
       ctx.textAlign="start";
+      ctx.textBaseline="alphabetic";
     } else {
       ctx.fillStyle="#ff7ad9";
       ctx.beginPath(); ctx.arc(it.x,it.y,it.r,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#5a003f"; ctx.font="10px system-ui"; ctx.textAlign="center";
+      ctx.fillStyle="#5a003f"; ctx.font="10px system-ui"; 
+      ctx.textAlign="center";
+      ctx.textBaseline="middle";
       ctx.fillText("L", it.x, it.y+3);
       ctx.textAlign="start";
+      ctx.textBaseline="alphabetic";
     }
   }
 
