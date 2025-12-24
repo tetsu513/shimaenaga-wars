@@ -444,6 +444,10 @@ let stageKills = 0;       // 現ステージで倒した雑魚数
 let bossAlive = false;    // ボス戦中か
 let stageIntro = 0;       // ステージ表示残りフレーム（例：120=2秒）
 let gameClearTimer = 0;   // GAME CLEAR 表示用（フレーム）
+// ★ステージクリア後の遷移ディレイ用（1秒）
+let stageClearDelay = 0;        // 残りフレーム
+let stageClearDelayNext = 0;    // 次に進むステージ番号
+
 // ===== Ending (after Stage 3 clear) =====
 let endingTimer = 0;        // 経過フレーム
 let endingCharN = 0;        // ナレーションの表示文字数（タイプ風）
@@ -527,6 +531,8 @@ let particles = [];
 // boss
 let boss = null;
 let bossBullets = [];
+let bossDeath = null; // ★ボス撃破爆発演出用
+
 
 // stage
 let stageTime = 0;
@@ -575,6 +581,107 @@ function addParticles(x,y, n=14){
     });
   }
 }
+
+// ★ボス撃破：爆発演出の開始
+function startBossDeath(nextStage){
+  if (!boss) return;
+
+  // いったんボス情報をスナップショット（boss=nullにしても描けるように）
+  bossDeath = {
+    stage,
+    x: boss.x, y: boss.y,
+    w: boss.w, h: boss.h,
+    core: { x: boss.core.x, y: boss.core.y, w: boss.core.w, h: boss.core.h },
+    t: 0,
+    dur: 60,           // 爆発演出の長さ（60=約1秒）
+    nextStage
+  };
+
+  // 弾は消す（事故防止）
+  bossBullets = [];
+  ebullets = [];
+
+  // 画面揺れ＆重めSE（短く）
+  startShake(18);
+  se(90, 0.12, "sawtooth", 0.14);
+  setTimeout(()=>se(70, 0.10, "sawtooth", 0.12), 120);
+
+  // 以後の当たり判定・発射を止めるため、実体は消す
+  boss = null;
+}
+
+// ★ボス撃破：爆発演出の更新
+function updateBossDeath(){
+  if (!bossDeath) return false;
+
+  bossDeath.t++;
+
+  // 小爆発をランダムに散らす（序盤多め）
+  const t = bossDeath.t;
+  const freq = (t < 25) ? 3 : (t < 45) ? 2 : 1; // 1フレームあたりの発生回数
+  for (let k = 0; k < freq; k++){
+    const rx = rnd(-bossDeath.w*0.45, bossDeath.w*0.45);
+    const ry = rnd(-bossDeath.h*0.45, bossDeath.h*0.45);
+    addParticles(bossDeath.x + rx, bossDeath.y + ry, 10 + ((Math.random()*8)|0));
+  }
+
+  // コア爆発（最後にドン）
+  if (bossDeath.t === bossDeath.dur - 8){
+    addParticles(bossDeath.core.x, bossDeath.core.y, 60);
+    startShake(26);
+    se(40, 0.16, "square", 0.18);
+  }
+
+  if (bossDeath.t >= bossDeath.dur) return true;
+  return false;
+}
+
+// ★ボス撃破：爆発演出の描画（ボスの残像＋フラッシュ）
+function drawBossDeath(){
+  if (!bossDeath) return;
+
+  const img = bossImgs[bossDeath.stage];
+  const p = bossDeath.t / bossDeath.dur;
+
+  // 本体：徐々に薄く
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, 1 - p*1.2);
+
+  if (img && img.complete && img.naturalWidth > 0){
+    ctx.drawImage(
+      img,
+      Math.round(bossDeath.x - bossDeath.w/2),
+      Math.round(bossDeath.y - bossDeath.h/2),
+      bossDeath.w,
+      bossDeath.h
+    );
+  }
+
+  // コア：終盤だけ発光
+  if (bossCoreImg && bossCoreImg.complete && bossCoreImg.naturalWidth > 0){
+    if (bossDeath.t > bossDeath.dur * 0.55){
+      ctx.shadowBlur = 18;
+      ctx.shadowColor = "rgba(255,80,80,0.95)";
+    }
+    ctx.drawImage(
+      bossCoreImg,
+      Math.round(bossDeath.core.x - bossDeath.core.w/2),
+      Math.round(bossDeath.core.y - bossDeath.core.h/2),
+      bossDeath.core.w,
+      bossDeath.core.h
+    );
+  }
+
+  // フラッシュ（軽く）
+  if (bossDeath.t % 6 === 0){
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0,0,W,H);
+  }
+
+  ctx.restore();
+}
+
 
 function addScore(base){
   combo++;
@@ -1020,6 +1127,10 @@ function update(){
   if (scene === Scene.Settings) { settingsInput(); return; }
   if (scene === Scene.Over) {
     if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
+    shake = 0;
+    flash = 0;
+    hitStop = 0;
+
         scene = Scene.Title; 
         titleUnlocked = false;
         menuIndex = 0;
@@ -1036,8 +1147,63 @@ if (hitStop > 0) {
   return;
 }
 
+// ★ ステージクリア後：1秒ディレイしてから次へ進む
+if (stageClearDelay > 0) {
+  stageClearDelay--;
+  if (stageClearDelay === 0) {
+    const next = stageClearDelayNext;
+
+    if (next > 3) {
+      gameClearTimer = 120; // GAME CLEAR 表示
+    } else {
+      stage = next;
+      stageTime = 0;
+      stageKills = 0;
+      stageIntro = 120;   // STAGE表示（2秒想定）
+      bossCleared = false;
+    }
+  }
+  return; // ★ この1秒間は他のゲーム進行を完全停止
+}
 
   tick++;
+  // ===== Boss death (explosion) progression =====
+  if (bossDeath) {
+    const done = updateBossDeath();
+
+    if (done) {
+      const next = bossDeath.nextStage;
+      bossDeath = null;
+
+      bossAlive = false; // ボス戦終了
+
+      jingle("clear");
+
+  // ★ ここでは即遷移しない。1秒ディレイを予約する
+    stageClearDelay = 60;        // 60フレーム = 約1秒
+    stageClearDelayNext = next;
+    }
+
+    // 爆発中は通常進行を止める（ボスだけ固まるのを防ぐ＆事故防止）
+    return;
+  }
+
+  // ===== GAME CLEAR overlay countdown =====
+  if (gameClearTimer > 0) {
+    gameClearTimer--;
+    if (gameClearTimer === 0) {
+      // エンディングへ
+      scene = Scene.End;
+      endingTimer = 0;
+      endingCharN = 0;
+      endClicked = false;
+      endKeyPressed = false;
+    }
+    return;
+  }
+
+
+  
   // --- Ending: click to return title ---
 if (scene === Scene.End) {
   const ready = (endingCharN >= ENDING_TEXT.length);
@@ -1046,6 +1212,11 @@ if (scene === Scene.End) {
 if (ready && (endClicked || endKeyPressed)) {
 endClicked = false;    // 消費
 endKeyPressed = false; // 消費
+
+  shake = 0;
+  flash = 0;
+  hitStop = 0;
+
 scene = Scene.Title;
 startBgm("title");
 
@@ -1452,59 +1623,10 @@ const interval = intervalBase + phase2Bonus + stageBonus;
       }
     }
 
-    if (boss.hp <= 0) {
-      boss = null;
-      bossBullets = [];
-
-      const clearBonus = noMiss ? 300 : 150;
-      score += clearBonus;
-
-      jingle("clear");
-      startBgm("play");
-
-      spawnItem("heal", W/2, 170);
-      spawnItem("three", W/2-70, 210);
-      spawnItem("laser", W/2+70, 210);
-
-if (stage >= 3) {
-  // ===== ENDING =====
-  scene = Scene.End;
-  endingTimer = 0;
-  endingCharN = 0;
-
-  stageIntro = 0;
-  stageKills = 0;
-
-  boss = null;
-  bossBullets = [];
-  ebullets = [];
-  bullets = [];
-  enemies = [];
-  items = [];
-  particles = [];
-
-  // クリアSE（和音＋余韻）
-  se(659, 0.22, "triangle", 0.30);
-  se(784, 0.22, "triangle", 0.30);
-  se(988, 0.26, "triangle", 0.40);
-  se(1319, 0.20, "sine", 0.25);
-
-  // BGMは静かに（今あるなら使う）
-  fadeOutBgm?.(0.6);
-} else {
-
-
-
-    stage++;
-    stageTime = 0;
-    bossCleared = false;
-    stageKills = 0;
-    stageIntro = 120;
-    }
-
-      stageKills = 0;     // 次ステージ用に撃破数リセット（重要）
-      stageIntro = 120;   // STAGE 2/3 表示（2秒）
-
+    if (boss.hp <= 0) 
+    {      // ★ボス撃破：まずは爆発演出へ（クリア処理は update() 冒頭の bossDeath 側で実行）
+      startBossDeath(stage + 1);
+      return;
     }
   }
 
@@ -1941,6 +2063,11 @@ for (const e of enemies) {
       ctx.fillText("L", it.x, it.y+3);
       ctx.textAlign="start";
     }
+  }
+
+    // boss death explosion（bossがnullでも描く）
+  if (bossDeath) {
+    drawBossDeath();
   }
 
     // boss
