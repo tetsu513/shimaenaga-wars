@@ -43,6 +43,17 @@ canvas.addEventListener("pointerdown", (e) => {
   if (scene !== Scene.Play) return;
 
   e.preventDefault(); // ピンチ・ズームに奪われないようにする
+  // --- two-finger skill trigger ---
+  activePointers.add(e.pointerId);
+
+  // 2本指になった瞬間に1回だけスキル発動
+  if (activePointers.size >= 2 && !skillTouchLatch) {
+    skillTouchLatch = true;
+    tryActivateSkill();
+  }
+
+
+
 }, { passive:false });
 
 
@@ -1130,6 +1141,8 @@ function update(){
     shake = 0;
     flash = 0;
     hitStop = 0;
+
+
 
         scene = Scene.Title; 
         titleUnlocked = false;
