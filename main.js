@@ -38,22 +38,23 @@ canvas.addEventListener("pointerdown", (e) => {
   startBgm("title");
 }, { passive: false });
 
-// ===== Skill: two-finger touch on canvas (Shift alternative / stable on iOS) =====
 canvas.addEventListener("pointerdown", (e) => {
   if (scene !== Scene.Play) return;
 
+  // 二本指判定の登録（canvasで拾ってもOKにする）
+  registerPointerDown(e);
+
   e.preventDefault(); // ピンチ・ズームに奪われないようにする
-  // --- two-finger skill trigger ---
-  activePointers.add(e.pointerId);
+}, { passive:false });
 
-  // 2本指になった瞬間に1回だけスキル発動
-  if (activePointers.size >= 2 && !skillTouchLatch) {
-    skillTouchLatch = true;
-    tryActivateSkill();
-  }
+canvas.addEventListener("pointerup", (e) => {
+  if (scene !== Scene.Play) return;
+  registerPointerUp(e);
+}, { passive:false });
 
-
-
+canvas.addEventListener("pointercancel", (e) => {
+  if (scene !== Scene.Play) return;
+  registerPointerUp(e);
 }, { passive:false });
 
 
@@ -63,6 +64,9 @@ wrap.addEventListener("pointerdown", (e) => {
   // タイトル画面の「最初のタップ」等、既存処理があるので邪魔しないように
   // Play中だけドラッグ移動を有効にする
   if (scene !== Scene.Play) return;
+  // 二本指判定の登録（wrapで拾ってもOKにする）
+  registerPointerDown(e);
+
   if (drag.active) { e.preventDefault(); return; }
 
 // UIボタンの操作はドラッグ扱いにしない
@@ -117,20 +121,19 @@ function endDrag(e){
 }
 
 wrap.addEventListener("pointerup", (e) => {
-  activePointers.delete(e.pointerId);
-  if (activePointers.size < 2) skillTouchLatch = false;
+  registerPointerUp(e);
 
   endDrag(e);
   e.preventDefault();
 }, { passive:false });
 
 wrap.addEventListener("pointercancel", (e) => {
-  activePointers.delete(e.pointerId);
-  if (activePointers.size < 2) skillTouchLatch = false;
+  registerPointerUp(e);
 
   endDrag(e);
   e.preventDefault();
 }, { passive:false });
+
 
 wrap.addEventListener("pointerleave", () => { endDrag(); }, { passive:false });
 
@@ -298,6 +301,22 @@ const touch = { left:false, right:false, up:false, down:false, shot:false, tap:f
 // ===== Two-finger trigger for Skill (Shift alternative) =====
 const activePointers = new Set();  // 画面に触れている指の集合
 let skillTouchLatch = false;       // 二本指で1回だけ発動させるため
+// ===== Two-finger skill: unified pointer tracker =====
+function registerPointerDown(e){
+  activePointers.add(e.pointerId);
+
+  // 2本指になった瞬間に1回だけスキル発動
+  if (activePointers.size >= 2 && !skillTouchLatch) {
+    skillTouchLatch = true;
+    tryActivateSkill();
+  }
+}
+
+function registerPointerUp(e){
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) skillTouchLatch = false;
+}
+
 const drag = {
   
   active: false,
