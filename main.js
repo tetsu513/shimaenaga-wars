@@ -383,6 +383,34 @@ function se(freq=440, time=0.06, type="square", vol=0.12) {
   o.stop(audioCtx.currentTime + time);
 }
 
+// Normal shot SE (cool, not chiptune)
+function seShot(){
+  ensureAudio();
+  const t = audioCtx.currentTime;
+
+  // Layer 1: body (short, lower)
+  const o1 = audioCtx.createOscillator();
+  const g1 = audioCtx.createGain();
+  o1.type = "square";
+  o1.frequency.setValueAtTime(320, t);
+  g1.gain.setValueAtTime(0.12 * AudioBus.se * AudioBus.master, t);
+  g1.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+  o1.connect(g1).connect(audioCtx.destination);
+  o1.start(t);
+  o1.stop(t + 0.06);
+
+  // Layer 2: edge (very short, higher)
+  const o2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  o2.type = "triangle";
+  o2.frequency.setValueAtTime(1400, t);
+  g2.gain.setValueAtTime(0.06 * AudioBus.se * AudioBus.master, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+  o2.connect(g2).connect(audioCtx.destination);
+  o2.start(t);
+  o2.stop(t + 0.03);
+}
+
 function jingle(kind="start") {
   if (kind === "start") { se(660,0.06,"sine",0.12); setTimeout(()=>se(880,0.07,"sine",0.12),70); }
   if (kind === "boss")  { se(220,0.16,"sawtooth",0.14); setTimeout(()=>se(196,0.18,"sawtooth",0.14),160); }
@@ -423,7 +451,7 @@ function startBgm(mode="title") {
   o.start();
   lfo.start();
 
-  g.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.10, audioCtx.currentTime, 0.12);
+  g.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.05, audioCtx.currentTime, 0.12);
 
   bgmNode = o;
   bgmGain = g;
@@ -431,7 +459,7 @@ function startBgm(mode="title") {
 
 function updateBgmVolume() {
   if (!bgmGain) return;
-  bgmGain.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.10, audioCtx.currentTime, 0.08);
+  bgmGain.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.05, audioCtx.currentTime, 0.08);
 }
 
 // ★追加：BGMフェードアウト（ほどほどで止める）
@@ -865,7 +893,6 @@ function spawnBoss(){
   w: spr.coreW,
   h: spr.coreH
 }
-
   };
 
   bossBullets = [];
@@ -898,7 +925,7 @@ function applyItem(type){
 function fireNormal(){
   bullets.push({ x:player.x, y:player.y-18, r:4, vx:0, vy:-8 });
   player.fireCd = 9;
-  se(640,0.04,"square",0.07);
+  seShot();
 }
 
 function fireThree(){
