@@ -389,6 +389,97 @@ function loadSettings() {
   } catch {}
 }
 loadSettings();
+// --- Title BGM (mp3, Title only) ---
+// --- Stage/Boss BGM (mp3) ---
+const stgBgm = {
+  1: new Audio("assets/stg1.mp3"),
+  2: new Audio("assets/stg2.mp3"),
+  3: new Audio("assets/stg3.mp3"),
+};
+stgBgm[1].loop = true;
+stgBgm[2].loop = true;
+stgBgm[3].loop = true;
+
+const bossBgm = new Audio("assets/boss.mp3");
+bossBgm.loop = true;
+
+// Play中に鳴っているBGM（stage or boss）を一元管理
+let playBgm = null;
+
+// Play中BGMの音量を BGM * MASTER に追従
+function updatePlayBgmVolume(){
+  if (!playBgm) return;
+  playBgm.volume = clamp(AudioBus.bgm * AudioBus.master, 0, 1);
+}
+
+function stopPlayBgm(){
+  if (!playBgm) return;
+  playBgm.pause();
+  playBgm.currentTime = 0;
+  playBgm = null;
+}
+
+// クリックノイズ回避：軽くフェードして止める
+function fadeOutPlayBgm(time = 0.35){
+  if (!playBgm) return;
+
+  const a = playBgm;
+  const startVol = a.volume;
+  const ms = Math.max(80, Math.floor(time * 1000));
+  const steps = 12;
+  let i = 0;
+
+  const timer = setInterval(() => {
+    i++;
+    const p = i / steps;
+    a.volume = Math.max(0, startVol * (1 - p));
+    if (i >= steps) {
+      clearInterval(timer);
+      a.pause();
+      a.currentTime = 0;
+      if (playBgm === a) playBgm = null;
+    }
+  }, Math.floor(ms / steps));
+}
+
+function playStageBgm(stageNum){
+  stopPlayBgm();
+  const a = stgBgm[stageNum] || stgBgm[1];
+  playBgm = a;
+  updatePlayBgmVolume();
+  a.currentTime = 0;
+  a.play().catch(()=>{});
+}
+
+function playBossBgm(){
+  stopPlayBgm();
+  playBgm = bossBgm;
+  updatePlayBgmVolume();
+  bossBgm.currentTime = 0;
+  bossBgm.play().catch(()=>{});
+}
+
+
+
+const titleBgm = new Audio("assets/title.mp3");
+titleBgm.loop = true;
+
+// Title mp3 volume is tied to BGM * MASTER
+function updateTitleBgmVolume(){
+  titleBgm.volume = clamp(AudioBus.bgm * AudioBus.master, 0, 1);
+}
+
+// Play / Stop helpers
+function playTitleBgm(){
+  updateTitleBgmVolume();
+  titleBgm.currentTime = 0;
+  titleBgm.play().catch(()=>{});
+}
+function stopTitleBgm(){
+  titleBgm.pause();
+  titleBgm.currentTime = 0;
+}
+
 
 function se(freq=440, time=0.06, type="square", vol=0.12) {
   ensureAudio();
@@ -497,59 +588,55 @@ function jingle(kind="start") {
   if (kind === "dead")  { se(150,0.14,"sawtooth",0.14); setTimeout(()=>se(120,0.18,"sawtooth",0.14),140); }
 }
 
-let bgmNode = null;
-let bgmGain = null;
-
+// ---------- BGM (mp3 switcher) ----------
 function stopBgm() {
-  if (bgmNode) { try { bgmNode.stop(); } catch {} }
-  bgmNode = null;
-  bgmGain = null;
+  // タイトル以外（Play中）を止める
+  stopPlayBgm();
 }
 
 function startBgm(mode="title") {
   ensureAudio();
-  stopBgm();
 
-  const o = audioCtx.createOscillator();
-  const g = audioCtx.createGain();
-  const lfo = audioCtx.createOscillator();
-  const lfoG = audioCtx.createGain();
+  // modeは既存呼び出し互換のため保持
+  // titleは既存どおり title.mp3 を使う
+  if (mode === "title") {
+    stopPlayBgm();
+    playTitleBgm();
+    return;
+  }
 
-  o.type = mode === "boss" ? "sawtooth" : "square";
-  lfo.type = "sine";
-  lfo.frequency.value = mode === "title" ? 2.2 : mode === "boss" ? 4.0 : 3.0;
-  lfoG.gain.value = mode === "boss" ? 35 : 18;
+  // Play開始 or ステージ通常BGM
+  if (mode === "play") {
+    stopTitleBgm();
+    playStageBgm(stage);
+    return;
+  }
 
-  o.frequency.value = mode === "title" ? 180 : mode === "boss" ? 110 : 150;
+  // ボスBGM
+  if (mode === "boss") {
+    stopTitleBgm();
+    playBossBgm();
+    return;
+  }
 
-  lfo.connect(lfoG).connect(o.frequency);
-
-  g.gain.value = 0.0001;
-  o.connect(g).connect(audioCtx.destination);
-
-  o.start();
-  lfo.start();
-
-  g.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.05, audioCtx.currentTime, 0.12);
-
-  bgmNode = o;
-  bgmGain = g;
+  // 想定外は安全側
+  stopTitleBgm();
+  playStageBgm(stage);
 }
 
 function updateBgmVolume() {
-  if (!bgmGain) return;
-  bgmGain.gain.setTargetAtTime(AudioBus.bgm * AudioBus.master * 0.05, audioCtx.currentTime, 0.08);
+  // Title mp3
+  updateTitleBgmVolume();
+  // Play mp3（stage/boss）
+  updatePlayBgmVolume();
 }
 
 // ★追加：BGMフェードアウト（ほどほどで止める）
 function fadeOutBgm(time = 0.35) {
-  if (!bgmGain || !bgmNode) return;
-  const now = audioCtx.currentTime;
-  bgmGain.gain.cancelScheduledValues(now);
-  bgmGain.gain.setValueAtTime(bgmGain.gain.value, now);
-  bgmGain.gain.linearRampToValueAtTime(0.0001, now + time);
-  setTimeout(() => { stopBgm(); }, time * 1000 + 60);
+  // Play中BGMだけフェードアウト（タイトルは通常 stopTitleBgm() でOK）
+  fadeOutPlayBgm(time);
 }
+
 
 // ---------- Game State / Scenes ----------
 const Scene = {
@@ -1096,6 +1183,10 @@ function startOpening(){
   howOverlay = false;
   settingsOverlay = false;
 
+  // ★Title mp3停止（保険）
+  stopTitleBgm();
+
+
   opening.active = true;
   opening.phase = 0;
   opening.alpha = 0;
@@ -1308,12 +1399,17 @@ if (titleUnlocked && settingsOverlay) {
   return;
 }
 
-  if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
-    titleUnlocked = true;
-    ensureAudio();
-    startBgm("title");
-    se(520, 0.06, "sine", 0.10);
-  }
+if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
+  titleUnlocked = true;
+  ensureAudio();
+
+  // ★Titleはmp3ループ
+  stopBgm();        // オシレーターTitleBGMは使わない
+  playTitleBgm();
+
+  se(520, 0.06, "sine", 0.10);
+}
+
   return;
 }
 
@@ -1329,8 +1425,13 @@ if (titleUnlocked && (howOverlay || settingsOverlay)) {
   // 解除後は通常メニュー操作
   if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
     if (menuIndex === 0) {
-    ensureAudio();
-    startOpening(); // ★ここでオープニングへ
+  ensureAudio();
+
+  // ★Titleを抜けるので止める
+  stopTitleBgm();
+
+  startOpening(); // ★ここでオープニングへ
+
 
     } else if (menuIndex === 1) {
   // ★遊び方：Title画面の上で説明を出す/消す
@@ -1338,7 +1439,8 @@ if (titleUnlocked && (howOverlay || settingsOverlay)) {
   if (howOverlay) {
     menuIndex = 1; // 遊び方を光らせる
     ensureAudio();
-    startBgm("title");
+    stopBgm();
+    playTitleBgm();
     se(520,0.06,"sine",0.08);
   } else {
     menuIndex = 0; // 閉じたら選択も外す
@@ -1351,7 +1453,8 @@ if (titleUnlocked && (howOverlay || settingsOverlay)) {
   if (settingsOverlay) {
     menuIndex = 2; // 設定を光らせる
     ensureAudio();
-    startBgm("title");
+    stopBgm();
+    playTitleBgm();
     se(420,0.06,"sine",0.08);
   } else {
     saveSettings();
@@ -1396,7 +1499,8 @@ if (Math.abs(touch.tapX - x) <= hitW / 2 && Math.abs(touch.tapY - y) <= hitH / 2
   if (howOverlay) {
     menuIndex = 1; // 遊び方を光らせる
     ensureAudio();
-    startBgm("title");
+    stopBgm();
+    playTitleBgm();
     se(520, 0.06, "sine", 0.08);
   } else {
     menuIndex = 0; // 閉じたら選択も外す
@@ -1410,7 +1514,8 @@ if (Math.abs(touch.tapX - x) <= hitW / 2 && Math.abs(touch.tapY - y) <= hitH / 2
   if (settingsOverlay) {
     menuIndex = 2;
     ensureAudio();
-    startBgm("title");
+    stopBgm();
+    playTitleBgm();
     se(420, 0.06, "sine", 0.08);
   } else {
     saveSettings();
@@ -1443,7 +1548,8 @@ if (pressedOnce("Enter") || pressedOnce("NumpadEnter")) {
   menuIndex = 0;
 
   se(520,0.06,"sine",0.08);
-  startBgm("title");
+    stopBgm();
+    playTitleBgm();
 }
 
 
@@ -1491,7 +1597,8 @@ function update(){
         titleUnlocked = false;
         menuIndex = 0;
         se(520,0.06,"sine",0.08); 
-        startBgm("title"); 
+    stopBgm();
+    playTitleBgm();
     }
     return;
   }
@@ -1517,6 +1624,9 @@ if (stageClearDelay > 0) {
       stageKills = 0;
       stageIntro = 120;   // STAGE表示（2秒想定）
       bossCleared = false;
+      startBgm("play"); // ★追加：次ステージ通常BGMへ
+
+
     }
   }
   return; // ★ この1秒間は他のゲーム進行を完全停止
@@ -1591,7 +1701,8 @@ if (scene === Scene.End) {
         hitStop = 0;
 
         scene = Scene.Title;
-        startBgm("title");
+    stopBgm();
+    playTitleBgm();
       }
     }
   }
@@ -2639,5 +2750,6 @@ function loop(){
 }
 
 // Boot
-startBgm("title");
+    stopBgm();
+    playTitleBgm();
 loop();
